@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YOLO 训练平台</title>
+<link rel="stylesheet" href="style.css?v=20261110a">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234c8dff' stroke-width='2' stroke-linecap='round'><circle cx='12' cy='12' r='9'/><circle cx='12' cy='12' r='2.5'/><line x1='12' y1='1' x2='12' y2='6'/><line x1='12' y1='18' x2='12' y2='23'/><line x1='1' y1='12' x2='6' y2='12'/><line x1='18' y1='12' x2='23' y2='12'/></svg>">
+<script src="icons.js?v=20261110a"></script>
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="logo"><i data-i="crosshair" data-s="18"></i> YOLO 训练平台</div>
+    <nav>
+      <button class="tab active" data-tab="dashboard"><i data-i="bar-chart"></i>总览</button>
+      <button class="tab" data-tab="datasets"><i data-i="folder"></i>数据集</button>
+      <button class="tab" data-tab="annotate"><i data-i="pen"></i>在线标注</button>
+      <button class="tab" data-tab="training"><i data-i="trending"></i>训练与模型</button>
+      <button class="tab" data-tab="capture"><i data-i="monitor"></i>屏幕采集</button>
+      <button class="tab" data-tab="predict"><i data-i="search"></i>推理测试</button>
+    </nav>
+    <div id="sysstats" class="sysstats">加载中…</div>
+  </aside>
+
+  <main id="main">
+
+    <!-- ============ 总览 ============ -->
+    <section id="page-dashboard" class="page active">
+      <h1>总览</h1>
+      <div class="cards" id="dash-cards"></div>
+      <div class="panel">
+        <h3>快速开始</h3>
+        <div class="row gap">
+          <button class="btn primary" onclick="quickDemo()"><i data-i="sparkles"></i>生成演示数据集并训练（约 2 分钟跑通全流程）</button>
+        </div>
+        <p class="muted">演示数据集合成为彩色几何形状（圆形/矩形/三角形），无需自备数据即可体验 上传→标注→训练→推理 的完整链路。</p>
+      </div>
+      <div class="panel">
+        <h3>本机环境</h3>
+        <div id="env-info" class="kv-grid"></div>
+      </div>
+      <div class="panel">
+        <h3>最近任务</h3>
+        <div id="dash-recent"></div>
+      </div>
+    </section>
+
+    <!-- ============ 数据集 ============ -->
+    <section id="page-datasets" class="page">
+      <h1>数据集</h1>
+
+      <!-- 主流程：只上传图片 -->
+      <div class="panel highlight">
+        <h3>① 上传图片 → 生成数据集 <span class="muted small">（最常用：客户只需提供图片，标注在「在线标注」页完成）</span></h3>
+        <div class="wizard">
+          <div class="wiz-step">
+            <label class="wiz-label">1. 数据集名称</label>
+            <input id="wi-name" placeholder="如：工地安全帽 / 产品缺陷">
+          </div>
+          <div class="wiz-step">
+            <label class="wiz-label">2. 类别 <span class="muted small">（可留空，标注时再补）</span></label>
+            <input id="wi-classes" placeholder="如：人,安全帽,反光衣（逗号分隔）">
+          </div>
+          <div class="wiz-step">
+            <label class="wiz-label">3. 训练占比</label>
+            <input id="wi-split" type="number" value="0.8" min="0.1" max="0.99" step="0.05" style="max-width:110px">
+          </div>
+        </div>
+        <div class="dropzone big" id="wi-drop">
+          <div class="dz-icon"><i data-i="upload"></i></div>
+          <div><b>把客户的图片全部拖进来</b>，或 <label class="btn primary small">选择图片<input type="file" id="wi-file" accept="image/*,.heic,.heif" multiple hidden></label></div>
+          <div class="muted small">支持 JPG / PNG / WEBP / BMP / TIFF / HEIC；自动处理手机旋转、超大图压缩、重复图片去重</div>
+          <div id="wi-picked" class="muted small"></div>
+        </div>
+        <div class="row gap" style="margin-top:10px">
+          <button class="btn primary" id="wi-start" onclick="wizardUpload()" disabled>开始导入并建数据集</button>
+          <span class="muted" id="wi-status"></span>
+        </div>
+        <div id="wi-bar-wrap" class="progress-wrap" style="display:none">
+          <div class="progress"><i id="wi-bar" style="width:0%"></i></div>
+          <div id="wi-log" class="wi-log"></div>
+        </div>
+      </div>
+
+      <!-- 其他导入方式 -->
+      <details class="panel collapse">
+        <summary>其他导入方式：YOLO 结构 zip / 已标注数据</summary>
+        <div class="row gap wrap" style="margin-top:12px">
+          <div class="dropzone" id="ds-drop">
+            <div>拖拽 <b>zip</b> 或 <b>图片</b> 到此处，或 <label class="btn small">选择文件<input type="file" id="ds-file" accept=".zip,image/*" hidden></label></div>
+            <div class="muted small">支持：YOLO 结构 zip（images/labels + data.yaml）· 任意图片包 zip · 单张图片</div>
+          </div>
+          <div class="form-col">
+            <label>名称 <input id="ds-name" placeholder="可选"></label>
+            <label>任务类型
+              <select id="ds-task"><option value="detect">目标检测</option><option value="segment">实例分割</option></select>
+            </label>
+            <label>训练占比 <input id="ds-split" type="number" value="0.8" min="0.1" max="0.99" step="0.05"></label>
+            <button class="btn" onclick="uploadDataset()">上传导入</button>
+          </div>
+        </div>
+        <div id="upload-progress" class="muted"></div>
+      </details>
+
+      <div class="panel">
+        <h3>手动创建空数据集 / 演示数据</h3>
+        <div class="row gap wrap">
+          <input id="newds-name" placeholder="数据集名称">
+          <input id="newds-classes" placeholder="类别，逗号分隔，如：人,车,狗" style="min-width:260px">
+          <button class="btn" onclick="createDataset()">创建</button>
+          <button class="btn" onclick="quickDemo()">生成演示数据集</button>
+        </div>
+      </div>
+      <div id="ds-list" class="ds-list"></div>
+    </section>
+
+    <!-- ============ 标注 ============ -->
+    <section id="page-annotate" class="page">
+      <h1>在线标注</h1>
+      <div class="panel" id="an-progress-panel">
+        <div class="row gap wrap" style="justify-content:space-between">
+          <div>
+            <b id="an-prog-text">标注进度</b>
+            <span class="muted small" id="an-prog-sub"></span>
+          </div>
+          <div class="row gap">
+            <label class="chk"><input type="checkbox" id="an-autosave" checked> 翻页自动保存</label>
+            <button class="btn primary small" id="an-gotrain" onclick="anReadyToTrain()" style="display:none"><i data-i="check-circle"></i>标注完成，去训练</button>
+          </div>
+        </div>
+        <div class="progress" style="margin-top:8px"><i id="an-prog-bar" style="width:0%"></i></div>
+      </div>
+      <div class="row gap wrap" style="margin-bottom:10px">
+        <label>数据集 <select id="an-ds" onchange="anLoadList()"></select></label>
+        <label>划分 <select id="an-split" onchange="anLoadList()"><option value="train">train</option><option value="val">val</option></select></label>
+        <label>筛选 <select id="an-filter" onchange="anLoadList()">
+          <option value="no">未标注</option><option value="">全部</option><option value="yes">已标注</option>
+        </select></label>
+        <input id="an-q" placeholder="搜索文件名…" oninput="debounce(anLoadList,300)()">
+        <span class="spacer"></span>
+        <button class="btn small" onclick="anAddImages()"><i data-i="plus"></i>添加图片</button>
+        <button class="btn small" onclick="anAddImagesNative()" title="打开系统文件管理器批量选图"><i data-i="folder"></i>从文件夹选图</button>
+        <input type="file" id="an-file" accept="image/*,.heic,.heif" multiple hidden onchange="anUploadImages(this.files)">
+        <button class="btn small" onclick="aiAssist()" title="用模型自动预标注当前图（模型仓库中任选其一）"><i data-i="sparkles"></i>AI 预标注</button>
+      </div>
+      <div id="an-empty" class="panel empty-hint" style="display:none">
+        <div class="empty-icon"><i data-i="camera"></i></div>
+        <h3>这个数据集还没有图片</h3>
+        <p class="muted">先上传图片，再回来标注。也可以直接把图片拖进下面的画布区域。</p>
+        <button class="btn primary" onclick="anAddImages()">上传图片</button>
+      </div>
+      <div class="annotate-layout">
+        <div class="an-side">
+          <h4>类别 <span class="muted small">（数字键切换）</span></h4>
+          <div id="an-classes" class="class-list"></div>
+          <button class="btn small" onclick="anAddClass()"><i data-i="plus"></i>新增类别</button>
+          <h4 style="margin-top:14px">图片 <span id="an-count" class="muted"></span></h4>
+          <div id="an-thumbs" class="thumbs"></div>
+        </div>
+        <div class="an-canvas-wrap">
+          <div class="an-toolbar">
+            <div class="shape-tools">
+              <button class="btn small active" data-shape="box" onclick="anSetShape('box')" title="矩形框 (B)"><i data-i="shape-rect"></i>矩形</button>
+              <button class="btn small" data-shape="circle" onclick="anSetShape('circle')" title="圆形，从圆心拖出 (C)"><i data-i="shape-circle"></i>圆形</button>
+              <button class="btn small" data-shape="ellipse" onclick="anSetShape('ellipse')" title="椭圆，拖外接框 (E)"><i data-i="shape-ellipse"></i>椭圆</button>
+              <button class="btn small" data-shape="polygon" onclick="anSetShape('polygon')" title="多边形：连续点击加点，双击/Enter 完成 (P)"><i data-i="shape-pentagon"></i>多边形</button>
+            </div>
+            <button class="btn small" onclick="anPrev()" title="上一张 (A)"><i data-i="chevron-left"></i></button>
+            <button class="btn small" onclick="anNext()" title="下一张 (D)"><i data-i="chevron-right"></i></button>
+            <span class="muted" id="an-imgname"></span>
+            <span class="spacer"></span>
+            <button class="btn small" onclick="anDeleteBox()" title="删除选中 (Del)"><i data-i="trash"></i>删除</button>
+            <button class="btn small" onclick="anUndo()" title="撤销 (Ctrl+Z)"><i data-i="undo"></i>撤销</button>
+            <button class="btn primary small" onclick="anSave()" title="保存 (S)"><i data-i="save"></i>保存</button>
+          </div>
+          <div class="canvas-stack">
+            <canvas id="an-canvas"></canvas>
+            <canvas id="an-overlay"></canvas>
+          </div>
+          <div class="muted small" id="an-help">拖拽画框 · 点击选中拖动 · 角点缩放 · 数字键 1-9 切换类别 · B/C/E/P 切换形状 · 多边形连续点击加点，双击/Enter 闭合，Esc 取消，Ctrl+Z 撤销上一个点</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 训练 + 模型仓库 ============ -->
+    <section id="page-training" class="page">
+      <h1>训练与模型</h1>
+
+      <!-- 1. 新建训练任务 -->
+      <div class="panel">
+        <h3>① 新建训练任务</h3>
+        <div class="form-grid">
+          <label>数据集 <select id="tr-ds"></select></label>
+          <label>基础权重来源
+            <select id="tr-init" onchange="trInitChange()">
+              <option value="builtin">内置模型（自动下载/已缓存）</option>
+              <option value="repo">本页模型仓库（选已有模型继续训练）</option>
+              <option value="lexical">本机权重文件</option>
+            </select>
+          </label>
+          <label id="tr-model-wrap">内置模型 <select id="tr-model"></select></label>
+          <label id="tr-repo-wrap" style="display:none">仓库模型 <select id="tr-repo-model"></select></label>
+          <label id="tr-path-wrap" style="display:none">本机权重
+            <div class="row gap" style="width:100%">
+              <input id="tr-weights" placeholder="点右侧按钮选择，或直接填路径" style="flex:1">
+              <button class="btn small" onclick="pickNativeFile('weights','tr-weights')" title="打开系统文件管理器选择"><i data-i="folder"></i>选择</button>
+            </div>
+          </label>
+          <label>任务名 <input id="tr-name" placeholder="可选"></label>
+          <label>Epochs <input id="tr-epochs" type="number" value="30" min="1"></label>
+          <label>图片尺寸 imgsz <input id="tr-imgsz" type="number" value="480" min="160" step="32"></label>
+          <label>Batch <input id="tr-batch" type="number" value="8" min="1"></label>
+          <label>设备 <select id="tr-device"><option value="cpu">CPU</option><option value="0">GPU 0（如有 CUDA）</option></select></label>
+          <label>线程 workers <input id="tr-workers" type="number" value="0" min="0" max="8"></label>
+          <label>初始学习率 lr0 <input id="tr-lr0" type="number" value="0.01" step="0.001" placeholder="默认"></label>
+        </div>
+        <div class="row gap" style="margin-top:10px">
+          <button class="btn primary" onclick="startTraining()"><i data-i="play"></i>开始训练</button>
+          <span class="muted" id="tr-hint">CPU 参考：yolo11n · 100 图 · imgsz 480 ≈ 每 epoch 10~30 秒</span>
+        </div>
+
+        <!-- 数据增强 -->
+        <div class="aug-box">
+          <div class="row gap wrap" style="margin-bottom:8px">
+            <b><i data-i="sliders"></i>数据增强</b>
+            <button class="btn small" onclick="applyPreset('default')">官方默认</button>
+            <button class="btn small" onclick="applyPreset('few')">小样本·强增强</button>
+            <button class="btn small" onclick="applyPreset('weak')">弱增强</button>
+            <button class="btn small" onclick="applyPreset('off')">关闭增强</button>
+            <span class="spacer"></span>
+            <span class="muted small" id="aug-summary"></span>
+          </div>
+          <div class="aug-grid" id="aug-grid"></div>
+          <div class="muted small" style="margin-top:8px">
+            Mosaic：4 图拼接（小目标/遮挡提升明显，收敛稍慢）· close_mosaic：最后 N 轮关闭 mosaic 精调 ·
+            Mixup/CopyPaste 建议 ≤0.3 · 旋转/剪切/透视过大易失真 · 只改动的参数会覆盖官方默认，未改动则沿用默认值
+          </div>
+        </div>
+
+        <!-- 模型改进 + 损失函数（科研创新方向） -->
+        <div class="aug-box">
+          <div class="row gap wrap" style="margin-bottom:8px">
+            <b><i data-i="sparkles"></i>模型改进 · 损失函数</b>
+            <span class="muted small">结构改进自动迁移预训练权重（新层随机初始化）；与原版对比即消融实验</span>
+          </div>
+          <div class="row gap wrap" id="arch-chips"></div>
+          <div class="row gap wrap" style="margin-top:10px;align-items:flex-end">
+            <label>回归损失
+              <select id="tr-iou-loss" style="min-width:200px"></select>
+            </label>
+            <span class="muted small" id="iou-loss-desc" style="flex:1;min-width:200px;padding-bottom:6px"></span>
+          </div>
+          <div class="aug-grid" id="strat-grid" style="margin-top:8px"></div>
+          <div class="muted small" style="margin-top:8px" id="arch-summary"></div>
+        </div>
+      </div>
+
+      <!-- 2. 任务列表 -->
+      <div class="panel">
+        <h3>② 训练任务</h3>
+        <table class="tbl" id="task-table">
+          <thead><tr><th>名称</th><th>模型</th><th>状态</th><th>进度</th><th>mAP50</th><th>耗时</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="panel" id="task-detail" style="display:none">
+        <h3>任务详情 <span id="td-title" class="muted"></span></h3>
+        <div class="row gap wrap">
+          <button class="btn small active" data-chart="loss" onclick="switchChart('loss')">Loss 曲线</button>
+          <button class="btn small" data-chart="map" onclick="switchChart('map')">mAP 曲线</button>
+          <button class="btn small" data-chart="pr" onclick="switchChart('pr')">PR 曲线</button>
+          <button class="btn small" data-chart="artifacts" onclick="switchChart('artifacts')">训练图表</button>
+          <button class="btn small" data-chart="log" onclick="switchChart('log')">实时日志</button>
+        </div>
+        <div id="chart-area"><canvas id="metric-canvas" width="1000" height="380"></canvas></div>
+        <div id="pr-area" style="display:none"><canvas id="pr-canvas" width="1000" height="380"></canvas></div>
+        <div id="artifacts-area" style="display:none" class="artifact-grid"></div>
+        <pre id="log-area" style="display:none"></pre>
+      </div>
+
+      <!-- 3. 模型仓库（合并自原模型页） -->
+      <div class="panel">
+        <h3>③ 模型仓库 <span class="muted small">（训练完成的模型自动入库；推理和下一次训练都从这里取）</span></h3>
+        <div class="row gap wrap" style="margin-bottom:10px">
+          <input id="md-q" placeholder="搜索模型名 / 类别…" oninput="debounce(renderModels,250)()" style="min-width:200px">
+          <select id="md-filter" onchange="renderModels()">
+            <option value="">全部来源</option>
+            <option value="trained">训练产出</option>
+            <option value="uploaded">本机导入</option>
+            <option value="pretrained">预训练</option>
+          </select>
+          <span class="spacer"></span>
+          <button class="btn small" onclick="openPredictFor()"><i data-i="search"></i>去推理验证</button>
+        </div>
+        <table class="tbl" id="model-table">
+          <thead><tr><th>名称</th><th>任务</th><th>类别</th><th>mAP50-95</th><th>大小</th><th>来源</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- 4. 从本机添加模型 -->
+      <div class="panel highlight">
+        <h3>④ 从本机添加模型 <span class="muted small">（把电脑里已有的权重登记进仓库）</span></h3>
+        <div class="row gap wrap">
+          <input id="ml-path" placeholder="点右侧按钮打开文件管理器选择，或直接粘贴完整路径" style="flex:1;min-width:320px">
+          <button class="btn primary" onclick="pickNativeFile('weights','ml-path')"><i data-i="folder"></i>打开文件管理器选择</button>
+          <button class="btn" onclick="mlInspect()"><i data-i="search"></i>识别信息</button>
+        </div>
+        <div class="row gap wrap" style="margin-top:6px">
+          <span class="muted small" id="ml-native-hint"></span>
+          <button class="btn small" onclick="mlBrowse($('ml-path').value||'')"><i data-i="archive"></i>网页内浏览目录</button>
+        </div>
+        <div class="row gap wrap" style="margin-top:10px">
+          <label class="chk"><input type="radio" name="ml-mode" value="copy" checked> 复制到平台（推荐，原文件可删）</label>
+          <label class="chk"><input type="radio" name="ml-mode" value="link"> 仅登记原路径（不占额外空间）</label>
+          <span class="spacer"></span>
+          <button class="btn primary" onclick="mlImport()"><i data-i="plus"></i>添加到模型仓库</button>
+        </div>
+        <div id="ml-result" class="muted small" style="margin-top:8px"></div>
+      </div>
+
+      <!-- 5. 预训练权重 -->
+      <div class="panel">
+        <h3>⑤ 官方预训练权重</h3>
+        <div id="pretrained-list" class="row gap wrap"></div>
+      </div>
+    </section>
+
+    <!-- ============ 模型 ============ -->
+    <!-- ============ 屏幕采集 ============ -->
+    <section id="page-capture" class="page">
+      <h1>屏幕采集插件</h1>
+      <div class="panel" id="cap-warn-panel" style="display:none">
+        <span id="cap-warn" style="color:var(--warn)"></span>
+      </div>
+
+      <div class="panel highlight">
+        <h3>① 新建定时采集任务 <span class="muted small">（到点自动开始；检测到鼠标在动才截图，静止自动跳过）</span></h3>
+        <div class="form-grid">
+          <label>采集到的数据集 <select id="cap-ds"></select></label>
+          <label>任务名 <input id="cap-name" placeholder="可选"></label>
+          <label>触发方式
+            <select id="cap-mode" onchange="capModeChange()">
+              <option value="once">定时一次</option>
+              <option value="daily">每天定点</option>
+            </select>
+          </label>
+          <label id="cap-at-once-wrap">启动时间 <input id="cap-at-once" type="datetime-local"></label>
+          <label id="cap-at-daily-wrap" style="display:none">每天时刻 <input id="cap-at-daily" type="time" value="09:00"></label>
+          <label>单次采集时长(分钟) <input id="cap-dur" type="number" value="10" min="0.5" step="0.5"></label>
+          <label>截图间隔(秒) <input id="cap-interval" type="number" value="1" min="0.5" step="0.5"></label>
+          <label>活跃窗口(秒) <span class="muted small">最后一次鼠标移动后仍截屏的时长</span>
+            <input id="cap-window" type="number" value="5" min="1" step="1">
+          </label>
+          <label>鼠标位移阈值(px) <input id="cap-th" type="number" value="3" min="1"></label>
+          <label>单次最多采集(张) <input id="cap-max" type="number" value="600" min="1"></label>
+        </div>
+        <div class="row gap" style="margin-top:10px">
+          <button class="btn primary" onclick="capCreate()"><i data-i="clock"></i>创建排程任务</button>
+          <button class="btn" onclick="capCreate(true)"><i data-i="play"></i>创建并立即开始</button>
+          <button class="btn" onclick="capTest()"><i data-i="camera"></i>立即试截一张验证</button>
+          <span class="muted" id="cap-status"></span>
+        </div>
+        <div class="muted small" style="margin-top:8px"><i data-i="info"></i> 采集图片自动去重：屏幕没变化时不会重复入库；图片带 cap_ 前缀，标注页可直接筛「未标注」。建议先「试截一张」确认能拿到画面。</div>
+      </div>
+
+      <div class="panel">
+        <h3>② 采集任务</h3>
+        <table class="tbl" id="cap-table">
+          <thead><tr><th>名称</th><th>数据集</th><th>排程</th><th>状态</th><th>已采/重复/空闲跳过</th><th>下次运行</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel">
+        <h3>③ 最近采集预览 <span class="muted small">（选择任务查看）</span></h3>
+        <div class="row gap wrap" style="margin-bottom:10px">
+          <select id="cap-pick" onchange="capRecent()"></select>
+        </div>
+        <div id="cap-recent" class="batch-grid"></div>
+      </div>
+    </section>
+
+    <!-- ============ 推理 ============ -->
+    <section id="page-predict" class="page">
+      <h1>推理验证</h1>
+      <div class="panel">
+        <h3>选择模型并验证</h3>
+        <div class="row gap wrap">
+          <label style="min-width:280px">模型仓库
+            <select id="pd-model" onchange="pdOnModelChange()" style="flex:1"></select>
+          </label>
+          <span id="pd-model-meta" class="muted small"></span>
+        </div>
+        <div class="row gap wrap" style="margin-top:10px">
+          <label>置信度 <input id="pd-conf" type="range" min="0.05" max="0.9" step="0.05" value="0.25" oninput="pdConfLabel.textContent=this.value"><span id="pdConfLabel">0.25</span></label>
+          <label>imgsz <input id="pd-imgsz" type="number" value="640" min="160" step="32" style="width:90px"></label>
+          <label>图片 <input type="file" id="pd-file" accept="image/*" onchange="pdRun(this.files[0])"></label>
+          <button class="btn small" onclick="pdPickFromDisk()" title="打开系统文件管理器选择图片"><i data-i="folder"></i>选择图片</button>
+          <span class="spacer"></span>
+          <button class="btn small" onclick="pdPickDatasetImage()"><i data-i="image"></i>用数据集图片验证</button>
+          <button class="btn small" onclick="pdTestAll()"><i data-i="zap"></i>批量验证数据集</button>
+        </div>
+      </div>
+
+      <div class="row gap wrap" style="align-items:flex-start">
+        <div class="panel grow"><h3>检测结果</h3><div id="pd-result" class="muted">选择模型并上传图片</div></div>
+        <div class="panel" style="min-width:360px"><h3>目标列表 <span id="pd-count" class="muted small"></span></h3><div id="pd-list"></div></div>
+      </div>
+
+      <div class="panel" id="pd-batch-panel" style="display:none">
+        <h3>批量验证结果 <span id="pd-batch-sub" class="muted small"></span></h3>
+        <div id="pd-batch-body" class="batch-grid"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="toast-box"></div>
+<dialog id="dlg-export">
+  <h3>导出模型</h3>
+  <div class="form-col">
+    <label>格式 <select id="ex-format"></select></label>
+    <label>imgsz <input id="ex-imgsz" type="number" value="640"></label>
+  </div>
+  <div class="row gap" style="margin-top:12px;justify-content:flex-end">
+    <button class="btn" onclick="dlgExport.close()">取消</button>
+    <button class="btn primary" id="ex-go">导出</button>
+  </div>
+  <div id="ex-result" class="muted" style="margin-top:8px"></div>
+</dialog>
+<dialog id="dlg-bdetail">
+  <div class="bd-head">
+    <h3><i data-i="search"></i> <span id="bd-title">详情</span></h3>
+    <span class="spacer"></span>
+    <span id="bd-nav-info" class="muted small"></span>
+    <button class="btn small" onclick="bdNav(-1)" title="上一张（←）"><i data-i="chevron-left"></i>上一张</button>
+    <button class="btn small" onclick="bdNav(1)" title="下一张（→）">下一张<i data-i="chevron-right"></i></button>
+    <button class="btn small" onclick="document.getElementById('dlg-bdetail').close()" title="关闭（Esc）"><i data-i="x"></i></button>
+  </div>
+  <div id="bd-body"></div>
+  <div id="bd-legend" class="muted small" style="margin-top:8px"></div>
+</dialog>
+<script src="app.js?v=20261110a"></script>
+</body>
+</html>

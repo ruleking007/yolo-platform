@@ -1,0 +1,14 @@
+# YOLO 训练平台依赖
+# 训练框架
+ultralytics==8.4.207
+# torch / torchvision 由 ultralytics 拉取（CPU 版，Windows cp314 wheel）
+# Web 服务
+fastapi>=0.110
+uvicorn>=0.30
+python-multipart>=0.0.9
+# 图像与可视化
+pillow>=10.0
+opencv-python>=4.9
+matplotlib>=3.8
+pyyaml>=6.0
+psutil>=5.9
